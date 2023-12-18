@@ -24,7 +24,7 @@
 <!-- begin header from Jabref -->
 <script type="text/javascript">
 <!--
-// QuickSearch script for JabRef HTML export (no Abstract/BibTeX)
+// QuickSearch script for JabRef HTML export 
 // Version: 3.0
 //
 // Copyright (c) 2006-2011, Mark Schenk
@@ -42,6 +42,9 @@
 //
 
 // Search settings
+var searchAbstract = true;	// search in abstract
+var searchComment = true;	// search in comment
+
 var noSquiggles = true; 	// ignore diacritics when searching
 var searchRegExp = false; 	// enable RegExp searches
 
@@ -57,7 +60,7 @@ function initSearch() {
 
 	// load all the rows and sort into arrays
 	loadTableData();
-
+	
 	//find the query field
 	qsfield = document.getElementById('qs_field');
 
@@ -67,7 +70,7 @@ function initSearch() {
 	//find statistics location
 	stats = document.getElementById('stat');
 	setStatistics(-1);
-
+	
 	// set up preferences
 	initPreferences();
 
@@ -82,27 +85,40 @@ function loadTableData() {
 	var allRows = searchTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
 
 	// split all rows into entryRows and infoRows (e.g. abstract, comment, bibtex)
-	entryRows = new Array();
+	entryRows = new Array(); infoRows = new Array(); absRows = new Array(); revRows = new Array();
 
 	// get data from each row
-	entryRowsData = new Array();
-
+	entryRowsData = new Array(); absRowsData = new Array(); revRowsData = new Array(); 
+	
 	BibTeXKeys = new Array();
-
+	
 	for (var i=0, k=0, j=0; i<allRows.length;i++) {
 		if (allRows[i].className.match(/entry/)) {
 			entryRows[j] = allRows[i];
 			entryRowsData[j] = stripDiacritics(getTextContent(allRows[i]));
 			allRows[i].id ? BibTeXKeys[j] = allRows[i].id : allRows[i].id = 'autokey_'+j;
 			j ++;
+		} else {
+			infoRows[k++] = allRows[i];
+			// check for abstract/comment
+			if (allRows[i].className.match(/abstract/)) {
+				absRows.push(allRows[i]);
+				absRowsData[j-1] = stripDiacritics(getTextContent(allRows[i]));
+			} else if (allRows[i].className.match(/comment/)) {
+				revRows.push(allRows[i]);
+				revRowsData[j-1] = stripDiacritics(getTextContent(allRows[i]));
+			}
 		}
 	}
 	//number of entries and rows
 	numEntries = entryRows.length;
+	numInfo = infoRows.length;
+	numAbs = absRows.length;
+	numRev = revRows.length;
 }
 
 function quickSearch(){
-
+	
 	tInput = qsfield;
 
 	if (tInput.value.length == 0) {
@@ -114,10 +130,11 @@ function quickSearch(){
 		t = stripDiacritics(tInput.value);
 
 		if(!searchRegExp) { t = escapeRegExp(t); }
-
+			
 		// only search for valid RegExp
 		try {
 			textRegExp = new RegExp(t,"i");
+			closeAllInfo();
 			qsfield.className = '';
 		}
 			catch(err) {
@@ -126,7 +143,7 @@ function quickSearch(){
 			return;
 		}
 	}
-
+	
 	// count number of hits
 	var hits = 0;
 
@@ -135,12 +152,19 @@ function quickSearch(){
 
 		// only show search the cells if it isn't already hidden OR if the search term is getting shorter, then search all
 		if(cRow.className.indexOf('noshow')==-1 || tInput.value.length <= prevSearch.length){
-			var found = false;
+			var found = false; 
 
-			if (entryRowsData[i].search(textRegExp) != -1 || BibTeXKeys[i].search(textRegExp) != -1){
+			if (entryRowsData[i].search(textRegExp) != -1 || BibTeXKeys[i].search(textRegExp) != -1){ 
 				found = true;
+			} else {
+				if(searchAbstract && absRowsData[i]!=undefined) {
+					if (absRowsData[i].search(textRegExp) != -1){ found=true; } 
+				}
+				if(searchComment && revRowsData[i]!=undefined) {
+					if (revRowsData[i].search(textRegExp) != -1){ found=true; } 
+				}
 			}
-
+			
 			if (found){
 				cRow.className = 'entry show';
 				hits++;
@@ -152,7 +176,7 @@ function quickSearch(){
 
 	// update statistics
 	setStatistics(hits)
-
+	
 	// set previous search value
 	prevSearch = tInput.value;
 }
@@ -161,8 +185,8 @@ function quickSearch(){
 // Strip Diacritics from text
 // http://stackoverflow.com/questions/990904/javascript-remove-accents-in-strings
 
-// String containing replacement characters for stripping accents
-var stripstring =
+// String containing replacement characters for stripping accents 
+var stripstring = 
     'AAAAAAACEEEEIIII'+
     'DNOOOOO.OUUUUY..'+
     'aaaaaaaceeeeiiii'+
@@ -203,6 +227,48 @@ function escapeRegExp(str) {
   return str.replace(/[-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
 }
 
+function toggleInfo(articleid,info) {
+
+	var entry = document.getElementById(articleid);
+	var abs = document.getElementById('abs_'+articleid);
+	var rev = document.getElementById('rev_'+articleid);
+	var bib = document.getElementById('bib_'+articleid);
+	
+	if (abs && info == 'abstract') {
+		abs.className.indexOf('noshow') == -1?abs.className = 'abstract noshow':abs.className = 'abstract show';
+	} else if (rev && info == 'comment') {
+		rev.className.indexOf('noshow') == -1?rev.className = 'comment noshow':rev.className = 'comment show';
+	} else if (bib && info == 'bibtex') {
+		bib.className.indexOf('noshow') == -1?bib.className = 'bibtex noshow':bib.className = 'bibtex show';
+	} else { 
+		return;
+	}
+
+	// check if one or the other is available
+	var revshow; var absshow; var bibshow;
+	(abs && abs.className.indexOf('noshow') == -1)? absshow = true: absshow = false;
+	(rev && rev.className.indexOf('noshow') == -1)? revshow = true: revshow = false;	
+	(bib && bib.className.indexOf('noshow') == -1)? bibshow = true: bibshow = false;
+	
+	// highlight original entry
+	if(entry) {
+		if (revshow || absshow || bibshow) {
+		entry.className = 'entry highlight show';
+		} else {
+		entry.className = 'entry show';
+		}
+	}
+	
+	// When there's a combination of abstract/comment/bibtex showing, need to add class for correct styling
+	if(absshow) {
+		(revshow||bibshow)?abs.className = 'abstract nextshow':abs.className = 'abstract';
+	} 
+	if (revshow) {
+		bibshow?rev.className = 'comment nextshow': rev.className = 'comment';
+	}	
+	
+}
+
 function setStatistics (hits) {
 	if(hits < 0) { hits=numEntries; }
 	if(stats) { stats.firstChild.data = hits + '/' + numEntries}
@@ -211,7 +277,7 @@ function setStatistics (hits) {
 function getTextContent(node) {
 	// Function written by Arve Bersvendsen
 	// http://www.virtuelvis.com
-
+	
 	if (node.nodeType == 3) {
 	return node.nodeValue;
 	} // text node
@@ -225,7 +291,16 @@ function getTextContent(node) {
 }
 
 function showAll(){
+	closeAllInfo();
 	for (var i = 0; i < numEntries; i++){ entryRows[i].className = 'entry show'; }
+}
+
+function closeAllInfo(){
+	for (var i=0; i < numInfo; i++){
+		if (infoRows[i].className.indexOf('noshow') ==-1) {
+			infoRows[i].className = infoRows[i].className + ' noshow';
+		}
+	}
 }
 
 function clearQS() {
@@ -244,6 +319,14 @@ function updateSetting(obj){
 
 	switch(option)
 	 {
+	 case "opt_searchAbs":
+	   searchAbstract=!searchAbstract;
+	   redoQS();
+	   break;
+	 case "opt_searchRev":
+	   searchComment=!searchComment;
+	   redoQS();
+	   break;
 	 case "opt_useRegExp":
 	   searchRegExp=!searchRegExp;
 	   redoQS();
@@ -257,21 +340,26 @@ function updateSetting(obj){
 }
 
 function initPreferences(){
+	if(searchAbstract){document.getElementById("opt_searchAbs").checked = true;}
+	if(searchComment){document.getElementById("opt_searchRev").checked = true;}
 	if(noSquiggles){document.getElementById("opt_noAccents").checked = true;}
 	if(searchRegExp){document.getElementById("opt_useRegExp").checked = true;}
+	
+	if(numAbs==0) {document.getElementById("opt_searchAbs").parentNode.style.display = 'none';}
+	if(numRev==0) {document.getElementById("opt_searchRev").parentNode.style.display = 'none';}
 }
 
 function toggleSettings(){
 	var togglebutton = document.getElementById('showsettings');
 	var settings = document.getElementById('settings');
-
+	
 	if(settings.className == "hidden"){
 		settings.className = "show";
 		togglebutton.innerText = "close settings";
 		togglebutton.textContent = "close settings";
 	}else{
 		settings.className = "hidden";
-		togglebutton.innerText = "settings...";
+		togglebutton.innerText = "settings...";		
 		togglebutton.textContent = "settings...";
 	}
 }
@@ -279,7 +367,6 @@ function toggleSettings(){
 -->
 </script>
 <style type="text/css">
-
 
 form#quicksearch { width: auto; border-style: solid; border-color: gray; border-width: 1px 0px; padding: 0.7em 0.5em; display:none; position:relative; }
 span#searchstat {padding-left: 1em;}
@@ -399,6 +486,8 @@ p.infolinks { margin: 0.3em 0em 0em 0em; padding: 0px; }
 <div id="showsettings" onclick="toggleSettings()">settings...</div>
 <div id="settings" class="hidden">
 <ul>
+<li><input type="checkbox" class="search_setting" id="opt_searchAbs" onchange="updateSetting(this)"><label for="opt_searchAbs"> include abstract</label></li>
+<li><input type="checkbox" class="search_setting" id="opt_searchRev" onchange="updateSetting(this)"><label for="opt_searchRev"> include comment</label></li>
 <li><input type="checkbox" class="search_setting" id="opt_useRegExp" onchange="updateSetting(this)"><label for="opt_useRegExp"> use RegExp</label></li>
 <li><input type="checkbox" class="search_setting" id="opt_noAccents" onchange="updateSetting(this)"><label for="opt_noAccents"> ignore accents</label></li>
 </ul>
@@ -406,8 +495,7 @@ p.infolinks { margin: 0.3em 0em 0em 0em; padding: 0px; }
 </form>
 <table id="qs_table" border="1">
 <thead><tr><th width="20%">Author</th><th width="30%">Title</th><th width="5%">Year</th><th width="30%">Journal/Proceedings</th><th width="10%">Reftype</th><th width="5%">DOI/URL</th></tr></thead>
-<tbody>
-<tr id="DBLP:journals/scp/FerdousHKPS23" class="entry">
+<tbody><tr id="DBLP:journals/scp/FerdousHKPS23" class="entry">
 	<td>Ferdous, R., Hung, C., Kifetew, F.M., Prandi, D. and Susi, A.</td>
 	<td>EvoMBT: Evolutionary model based testing <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/scp/FerdousHKPS23','bibtex')">BibTeX</a>]</p></td>
 	<td>2023</td>
@@ -525,352 +613,1022 @@ p.infolinks { margin: 0.3em 0em 0em 0em; padding: 0px; }
 </tr>
 <tr id="DBLP:journals/csur/BertolinoBAGKMO21" class="entry">
 	<td>Bertolino, A., Braione, P., Angelis, G.D., Gazzola, L., Kifetew, F.M., Mariani, L., Orr&ugrave;, M., Pezz&egrave;, M., Pietrantuono, R., Russo, S. and Tonella, P.</td>
-	<td>A Survey of Field-based Testing Techniques</td>
+	<td>A Survey of Field-based Testing Techniques <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/csur/BertolinoBAGKMO21','bibtex')">BibTeX</a>]</p></td>
 	<td>2022</td>
 	<td>ACM Comput. Surv.<br/>Vol. 54(5), pp. 92:1-92:39&nbsp;</td>
 	<td>article</td>
 	<td><a href="https://doi.org/10.1145/3447240">DOI</a> <a href="https://doi.org/10.1145/3447240">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:journals/csur/BertolinoBAGKMO21" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DBLP:journals/csur/BertolinoBAGKMO21,
+  author = {Antonia Bertolino and Pietro Braione and Guglielmo De Angelis and Luca Gazzola and Fitsum Meshesha Kifetew and Leonardo Mariani and Matteo Orr&ugrave; and Mauro Pezz&egrave; and Roberto Pietrantuono and Stefano Russo and Paolo Tonella},
+  title = {A Survey of Field-based Testing Techniques},
+  journal = {ACM Comput. Surv.},
+  year = {2022},
+  volume = {54},
+  number = {5},
+  pages = {92:1--92:39},
+  url = {https://doi.org/10.1145/3447240},
+  doi = {https://doi.org/10.1145/3447240}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icst/KifetewP22" class="entry">
 	<td>Kifetew, F.M. and Panichella, A.</td>
-	<td>Message from the Program Co-Chairs</td>
+	<td>Message from the Program Co-Chairs <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icst/KifetewP22','bibtex')">BibTeX</a>]</p></td>
 	<td>2022</td>
 	<td>15th IEEE Conference on Software Testing, Verification and Validation, ICST 2022, Valencia, Spain, April 4-14, 2022, pp. xiii&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ICST53961.2022.00006">DOI</a> <a href="https://doi.org/10.1109/ICST53961.2022.00006">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icst/KifetewP22" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icst/KifetewP22,
+  author = {Fitsum Meshesha Kifetew and Annibale Panichella},
+  title = {Message from the Program Co-Chairs},
+  booktitle = {15th IEEE Conference on Software Testing, Verification and Validation, ICST 2022, Valencia, Spain, April 4-14, 2022},
+  publisher = {IEEE},
+  year = {2022},
+  pages = {xiii},
+  url = {https://doi.org/10.1109/ICST53961.2022.00006},
+  doi = {https://doi.org/10.1109/ICST53961.2022.00006}
+}
+</pre></td>
+</tr>
+<tr id="DBLP:conf/kbse/FerdousKPS22" class="entry">
+	<td>Ferdous, R., Kifetew, F.M., Prandi, D. and Susi, A.</td>
+	<td>Towards Agent-Based Testing of 3D Games using Reinforcement Learning <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/kbse/FerdousKPS22','bibtex')">BibTeX</a>]</p></td>
+	<td>2022</td>
+	<td>37th IEEE/ACM International Conference on Automated Software Engineering, ASE 2022, Rochester, MI, USA, October 10-14, 2022, pp. 211:1-211:8&nbsp;</td>
+	<td>inproceedings</td>
+	<td><a href="https://doi.org/10.1145/3551349.3560507">DOI</a> <a href="https://doi.org/10.1145/3551349.3560507">URL</a>&nbsp;</td>
+</tr>
+<tr id="bib_DBLP:conf/kbse/FerdousKPS22" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/kbse/FerdousKPS22,
+  author = {Raihana Ferdous and Fitsum Meshesha Kifetew and Davide Prandi and Angelo Susi},
+  title = {Towards Agent-Based Testing of 3D Games using Reinforcement Learning},
+  booktitle = {37th IEEE/ACM International Conference on Automated Software Engineering, ASE 2022, Rochester, MI, USA, October 10-14, 2022},
+  publisher = {ACM},
+  year = {2022},
+  pages = {211:1--211:8},
+  url = {https://doi.org/10.1145/3551349.3560507},
+  doi = {https://doi.org/10.1145/3551349.3560507}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/sbst/FerdousHKPS22" class="entry">
 	<td>Ferdous, R., Hung, C., Kifetew, F.M., Prandi, D. and Susi, A.</td>
-	<td>EvoMBT at the SBST 2022 Tool Competition</td>
+	<td>EvoMBT at the SBST 2022 Tool Competition <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/sbst/FerdousHKPS22','bibtex')">BibTeX</a>]</p></td>
 	<td>2022</td>
 	<td>15th IEEE/ACM International Workshop on Search-Based Software Testing, SBST@ICSE 2022, Pittsburgh, PA, USA, May 9, 2022, pp. 51-52&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1145/3526072.3527534">DOI</a> <a href="https://doi.org/10.1145/3526072.3527534">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/sbst/FerdousHKPS22" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/sbst/FerdousHKPS22,
+  author = {Raihana Ferdous and Chia-kang Hung and Fitsum Meshesha Kifetew and Davide Prandi and Angelo Susi},
+  title = {EvoMBT at the SBST 2022 Tool Competition},
+  booktitle = {15th IEEE/ACM International Workshop on Search-Based Software Testing, SBST@ICSE 2022, Pittsburgh, PA, USA, May 9, 2022},
+  publisher = {IEEE},
+  year = {2022},
+  pages = {51--52},
+  url = {https://doi.org/10.1145/3526072.3527534},
+  doi = {https://doi.org/10.1145/3526072.3527534}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/sigsoft/PrasetyaRKPSVPH22" class="entry">
 	<td>Prasetya, I.S.W.B., Ric&oacute;s, F.P., Kifetew, F.M., Prandi, D., Shirzadehhajimahmood, S., Vos, T.E.J., Paska, P., Hovorka, K., Ferdous, R., Susi, A. and Davidson, J.</td>
-	<td>An Agent-based Approach to Automated Game Testing: an Experience Report</td>
+	<td>An agent-based approach to automated game testing: an experience report <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/sigsoft/PrasetyaRKPSVPH22','bibtex')">BibTeX</a>]</p></td>
 	<td>2022</td>
 	<td>Proceedings of the 13th International Workshop on Automating Test Case Design, Selection and Evaluation, A-TEST 2022, Singapore, Singapore, November 17-18, 2022, pp. 1-8&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1145/3548659.3561305">DOI</a> <a href="https://doi.org/10.1145/3548659.3561305">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/sigsoft/PrasetyaRKPSVPH22" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/sigsoft/PrasetyaRKPSVPH22,
+  author = {I. S. W. B. Prasetya and Fernando Pastor Ric&oacute;s and Fitsum Meshesha Kifetew and Davide Prandi and Samira Shirzadehhajimahmood and Tanja E. J. Vos and Premysl Paska and Karel Hovorka and Raihana Ferdous and Angelo Susi and Joseph Davidson},
+  title = {An agent-based approach to automated game testing: an experience report},
+  booktitle = {Proceedings of the 13th International Workshop on Automating Test Case Design, Selection and Evaluation, A-TEST 2022, Singapore, Singapore, November 17-18, 2022},
+  publisher = {ACM},
+  year = {2022},
+  pages = {1--8},
+  url = {https://doi.org/10.1145/3548659.3561305},
+  doi = {https://doi.org/10.1145/3548659.3561305}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:journals/infsof/KifetewPSSMM21" class="entry">
 	<td>Kifetew, F.M., Perini, A., Susi, A., Siena, A., Mu&ntilde;ante, D. and Morales-Ramirez, I.</td>
-	<td>Automating user-feedback driven requirements prioritization</td>
+	<td>Automating user-feedback driven requirements prioritization <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/infsof/KifetewPSSMM21','bibtex')">BibTeX</a>]</p></td>
 	<td>2021</td>
 	<td>Inf. Softw. Technol.<br/>Vol. 138, pp. 106635&nbsp;</td>
 	<td>article</td>
 	<td><a href="https://doi.org/10.1016/j.infsof.2021.106635">DOI</a> <a href="https://doi.org/10.1016/j.infsof.2021.106635">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:journals/infsof/KifetewPSSMM21" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DBLP:journals/infsof/KifetewPSSMM21,
+  author = {Fitsum Meshesha Kifetew and Anna Perini and Angelo Susi and Alberto Siena and Denisse Mu&ntilde;ante and Itzel Morales-Ramirez},
+  title = {Automating user-feedback driven requirements prioritization},
+  journal = {Inf. Softw. Technol.},
+  year = {2021},
+  volume = {138},
+  pages = {106635},
+  url = {https://doi.org/10.1016/j.infsof.2021.106635},
+  doi = {https://doi.org/10.1016/j.infsof.2021.106635}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/MunantePKS21" class="entry">
 	<td>Mu&ntilde;ante, D., Perini, A., Kifetew, F.M. and Susi, A.</td>
-	<td>Combining risk and variability modelling for requirements analysis in SAS engineering</td>
+	<td>Combining risk and variability modelling for requirements analysis in SAS engineering <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/MunantePKS21','bibtex')">BibTeX</a>]</p></td>
 	<td>2021</td>
 	<td>29th IEEE International Requirements Engineering Conference, RE 2021, Notre Dame, IN, USA, September 20-24, 2021, pp. 396-401&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/RE51729.2021.00044">DOI</a> <a href="https://doi.org/10.1109/RE51729.2021.00044">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/MunantePKS21" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/MunantePKS21,
+  author = {Denisse Mu&ntilde;ante and Anna Perini and Fitsum Meshesha Kifetew and Angelo Susi},
+  title = {Combining risk and variability modelling for requirements analysis in SAS engineering},
+  booktitle = {29th IEEE International Requirements Engineering Conference, RE 2021, Notre Dame, IN, USA, September 20-24, 2021},
+  publisher = {IEEE},
+  year = {2021},
+  pages = {396--401},
+  url = {https://doi.org/10.1109/RE51729.2021.00044},
+  doi = {https://doi.org/10.1109/RE51729.2021.00044}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/ssbse/FerdousKPPSS21" class="entry">
 	<td>Ferdous, R., Kifetew, F.M., Prandi, D., Prasetya, I.S.W.B., Shirzadehhajimahmood, S. and Susi, A.</td>
-	<td>Search-Based Automated Play Testing of Computer Games: A Model-Based Approach</td>
+	<td>Search-Based Automated Play Testing of Computer Games: A Model-Based Approach <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/ssbse/FerdousKPPSS21','bibtex')">BibTeX</a>]</p></td>
 	<td>2021</td>
 	<td><br/>Vol. 12914Search-Based Software Engineering - 13th International Symposium, SSBSE 2021, Bari, Italy, October 11-12, 2021, Proceedings, pp. 56-71&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-030-88106-1%5C_5">DOI</a> <a href="https://doi.org/10.1007/978-3-030-88106-1\_5">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/ssbse/FerdousKPPSS21" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ssbse/FerdousKPPSS21,
+  author = {Raihana Ferdous and Fitsum Meshesha Kifetew and Davide Prandi and I. S. W. B. Prasetya and Samira Shirzadehhajimahmood and Angelo Susi},
+  title = {Search-Based Automated Play Testing of Computer Games: A Model-Based Approach},
+  booktitle = {Search-Based Software Engineering - 13th International Symposium, SSBSE 2021, Bari, Italy, October 11-12, 2021, Proceedings},
+  publisher = {Springer},
+  year = {2021},
+  volume = {12914},
+  pages = {56--71},
+  url = {https://doi.org/10.1007/978-3-030-88106-1_5},
+  doi = {https://doi.org/10.1007/978-3-030-88106-1%5C_5}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/sigsoft/2021atest" class="entry">
 	<td></td>
-	<td>A-TEST 2021: Proceedings of the 12th International Workshop on Automating TEST Case Design, Selection, and Evaluation, A-TEST@ESEC/SIGSOFT FSE 2021, Athens, Greece, August 23-24, 2021</td>
+	<td>A-TEST 2021: Proceedings of the 12th International Workshop on Automating TEST Case Design, Selection, and Evaluation, A-TEST@ESEC/SIGSOFT FSE 2021, Athens, Greece, August 23-24, 2021 <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/sigsoft/2021atest','bibtex')">BibTeX</a>]</p></td>
 	<td>2021</td>
 	<td>&nbsp;</td>
 	<td>proceedings</td>
 	<td><a href="https://doi.org/10.1145/3472672">DOI</a> <a href="https://doi.org/10.1145/3472672">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/sigsoft/2021atest" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@proceedings{DBLP:conf/sigsoft/2021atest,,
+  title = {A-TEST 2021: Proceedings of the 12th International Workshop on Automating TEST Case Design, Selection, and Evaluation, A-TEST@ESEC/SIGSOFT FSE 2021, Athens, Greece, August 23-24, 2021},
+  publisher = {ACM},
+  year = {2021},
+  url = {https://doi.org/10.1145/3472672},
+  doi = {https://doi.org/10.1145/3472672}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/emas/PrasetyaDPVDK20" class="entry">
 	<td>Prasetya, I.S.W.B., Dastani, M., Prada, R., Vos, T.E.J., Dignum, F. and Kifetew, F.M.</td>
-	<td>Aplib: Tactical Agents for Testing Computer Games</td>
+	<td>Aplib: Tactical Agents for Testing Computer Games <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/emas/PrasetyaDPVDK20','bibtex')">BibTeX</a>]</p></td>
 	<td>2020</td>
 	<td><br/>Vol. 12589Engineering Multi-Agent Systems - 8th International Workshop, EMAS 2020, Auckland, New Zealand, May 8-9, 2020, Revised Selected Papers, pp. 21-41&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-030-66534-0%5C_2">DOI</a> <a href="https://doi.org/10.1007/978-3-030-66534-0\_2">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/emas/PrasetyaDPVDK20" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/emas/PrasetyaDPVDK20,
+  author = {I. S. W. B. Prasetya and Mehdi Dastani and Rui Prada and Tanja E. J. Vos and Frank Dignum and Fitsum Meshesha Kifetew},
+  title = {Aplib: Tactical Agents for Testing Computer Games},
+  booktitle = {Engineering Multi-Agent Systems - 8th International Workshop, EMAS 2020, Auckland, New Zealand, May 8-9, 2020, Revised Selected Papers},
+  publisher = {Springer},
+  year = {2020},
+  volume = {12589},
+  pages = {21--41},
+  url = {https://doi.org/10.1007/978-3-030-66534-0_2},
+  doi = {https://doi.org/10.1007/978-3-030-66534-0%5C_2}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icst/CeccatoCGKMOT20" class="entry">
 	<td>Ceccato, M., Corradini, D., Gazzola, L., Kifetew, F.M., Mariani, L., Orr&ugrave;, M. and Tonella, P.</td>
-	<td>A Framework for In-Vivo Testing of Mobile Applications</td>
+	<td>A Framework for In-Vivo Testing of Mobile Applications <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icst/CeccatoCGKMOT20','bibtex')">BibTeX</a>]</p></td>
 	<td>2020</td>
 	<td>13th IEEE International Conference on Software Testing, Validation and Verification, ICST 2020, Porto, Portugal, October 24-28, 2020, pp. 286-296&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ICST46399.2020.00037">DOI</a> <a href="https://doi.org/10.1109/ICST46399.2020.00037">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icst/CeccatoCGKMOT20" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icst/CeccatoCGKMOT20,
+  author = {Mariano Ceccato and Davide Corradini and Luca Gazzola and Fitsum Meshesha Kifetew and Leonardo Mariani and Matteo Orr&ugrave; and Paolo Tonella},
+  title = {A Framework for In-Vivo Testing of Mobile Applications},
+  booktitle = {13th IEEE International Conference on Software Testing, Validation and Verification, ICST 2020, Porto, Portugal, October 24-28, 2020},
+  publisher = {IEEE},
+  year = {2020},
+  pages = {286--296},
+  url = {https://doi.org/10.1109/ICST46399.2020.00037},
+  doi = {https://doi.org/10.1109/ICST46399.2020.00037}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icst/PradaPKDVLDKDF20" class="entry">
 	<td>Prada, R., Prasetya, I.S.W.B., Kifetew, F.M., Dignum, F., Vos, T.E.J., Lander, J., Donnart, J., Kazmierowski, A., Davidson, J. and Fernandes, P.M.</td>
-	<td>Agent-based Testing of Extended Reality Systems</td>
+	<td>Agent-based Testing of Extended Reality Systems <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icst/PradaPKDVLDKDF20','bibtex')">BibTeX</a>]</p></td>
 	<td>2020</td>
 	<td>13th IEEE International Conference on Software Testing, Validation and Verification, ICST 2020, Porto, Portugal, October 24-28, 2020, pp. 414-417&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ICST46399.2020.00051">DOI</a> <a href="https://doi.org/10.1109/ICST46399.2020.00051">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icst/PradaPKDVLDKDF20" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icst/PradaPKDVLDKDF20,
+  author = {Rui Prada and I. S. W. B. Prasetya and Fitsum Meshesha Kifetew and Frank Dignum and Tanja E. J. Vos and Jason Lander and Jean-Yves Donnart and Alexandre Kazmierowski and Joseph Davidson and Pedro M. Fernandes},
+  title = {Agent-based Testing of Extended Reality Systems},
+  booktitle = {13th IEEE International Conference on Software Testing, Validation and Verification, ICST 2020, Porto, Portugal, October 24-28, 2020},
+  publisher = {IEEE},
+  year = {2020},
+  pages = {414--417},
+  url = {https://doi.org/10.1109/ICST46399.2020.00051},
+  doi = {https://doi.org/10.1109/ICST46399.2020.00051}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:journals/is/Morales-Ramirez19" class="entry">
 	<td>Morales-Ramirez, I., Kifetew, F.M. and Perini, A.</td>
-	<td>Speech-acts based analysis for requirements discovery from online discussions</td>
+	<td>Speech-acts based analysis for requirements discovery from online discussions <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/is/Morales-Ramirez19','bibtex')">BibTeX</a>]</p></td>
 	<td>2019</td>
 	<td>Inf. Syst.<br/>Vol. 86, pp. 94-112&nbsp;</td>
 	<td>article</td>
 	<td><a href="https://doi.org/10.1016/j.is.2018.08.003">DOI</a> <a href="https://doi.org/10.1016/j.is.2018.08.003">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:journals/is/Morales-Ramirez19" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DBLP:journals/is/Morales-Ramirez19,
+  author = {Itzel Morales-Ramirez and Fitsum Meshesha Kifetew and Anna Perini},
+  title = {Speech-acts based analysis for requirements discovery from online discussions},
+  journal = {Inf. Syst.},
+  year = {2019},
+  volume = {86},
+  pages = {94--112},
+  url = {https://doi.org/10.1016/j.is.2018.08.003},
+  doi = {https://doi.org/10.1016/j.is.2018.08.003}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icse/RuedaKD19" class="entry">
 	<td>Rueda, U., Kifetew, F.M. and Devroey, X.</td>
-	<td>Towards automated test case generation maturity</td>
+	<td>Towards automated test case generation maturity <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icse/RuedaKD19','bibtex')">BibTeX</a>]</p></td>
 	<td>2019</td>
 	<td>Proceedings of the 12th International Workshop on Search-Based Software Testing, SBST@ICSE 2019, Montreal, QC, Canada, May 27, 2019, pp. 9-10&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/SBST.2019.00011">DOI</a> <a href="https://doi.org/10.1109/SBST.2019.00011">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icse/RuedaKD19" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icse/RuedaKD19,
+  author = {Urko Rueda and Fitsum Meshesha Kifetew and Xavier Devroey},
+  title = {Towards automated test case generation maturity},
+  booktitle = {Proceedings of the 12th International Workshop on Search-Based Software Testing, SBST@ICSE 2019, Montreal, QC, Canada, May 27, 2019},
+  publisher = {IEEE / ACM},
+  year = {2019},
+  pages = {9--10},
+  url = {https://doi.org/10.1109/SBST.2019.00011},
+  doi = {https://doi.org/10.1109/SBST.2019.00011}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icse/KifetewDR19" class="entry">
 	<td>Kifetew, F.M., Devroey, X. and Rueda, U.</td>
-	<td>Java unit testing tool competition: seventh round</td>
+	<td>Java unit testing tool competition: seventh round <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icse/KifetewDR19','bibtex')">BibTeX</a>]</p></td>
 	<td>2019</td>
 	<td>Proceedings of the 12th International Workshop on Search-Based Software Testing, SBST@ICSE 2019, Montreal, QC, Canada, May 27, 2019, pp. 15-20&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/SBST.2019.00014">DOI</a> <a href="https://doi.org/10.1109/SBST.2019.00014">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icse/KifetewDR19" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icse/KifetewDR19,
+  author = {Fitsum Meshesha Kifetew and Xavier Devroey and Urko Rueda},
+  title = {Java unit testing tool competition: seventh round},
+  booktitle = {Proceedings of the 12th International Workshop on Search-Based Software Testing, SBST@ICSE 2019, Montreal, QC, Canada, May 27, 2019},
+  publisher = {IEEE / ACM},
+  year = {2019},
+  pages = {15--20},
+  url = {https://doi.org/10.1109/SBST.2019.00014},
+  doi = {https://doi.org/10.1109/SBST.2019.00014}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/issre/CeccatoGKMOT19" class="entry">
 	<td>Ceccato, M., Gazzola, L., Kifetew, F.M., Mariani, L., Orr&ugrave;, M. and Tonella, P.</td>
-	<td>Toward In-Vivo Testing of Mobile Applications</td>
+	<td>Toward In-Vivo Testing of Mobile Applications <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/issre/CeccatoGKMOT19','bibtex')">BibTeX</a>]</p></td>
 	<td>2019</td>
 	<td>IEEE International Symposium on Software Reliability Engineering Workshops, ISSRE Workshops 2019, Berlin, Germany, October 27-30, 2019, pp. 137-143&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ISSREW.2019.00063">DOI</a> <a href="https://doi.org/10.1109/ISSREW.2019.00063">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/issre/CeccatoGKMOT19" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/issre/CeccatoGKMOT19,
+  author = {Mariano Ceccato and Luca Gazzola and Fitsum Meshesha Kifetew and Leonardo Mariani and Matteo Orr&ugrave; and Paolo Tonella},
+  title = {Toward In-Vivo Testing of Mobile Applications},
+  booktitle = {IEEE International Symposium on Software Reliability Engineering Workshops, ISSRE Workshops 2019, Berlin, Germany, October 27-30, 2019},
+  publisher = {IEEE},
+  year = {2019},
+  pages = {137--143},
+  url = {https://doi.org/10.1109/ISSREW.2019.00063},
+  doi = {https://doi.org/10.1109/ISSREW.2019.00063}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/refsq/KifetewPS19" class="entry">
 	<td>Kifetew, F.M., Perini, A. and Susi, A.</td>
-	<td>Research on NLP for RE at the FBK-Software Engineering Research Line: A Report</td>
+	<td>Research on NLP for RE at the FBK-Software Engineering Research Line: A Report <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/refsq/KifetewPS19','bibtex')">BibTeX</a>]</p></td>
 	<td>2019</td>
 	<td><br/>Vol. 2376Joint Proceedings of REFSQ-2019 Workshops, Doctoral Symposium, Live Studies Track, and Poster Track co-located with the 25th International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2019), Essen, Germany, March 18th, 2019&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="http://ceur-ws.org/Vol-2376/NLP4RE19\_paper12.pdf">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/refsq/KifetewPS19" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/refsq/KifetewPS19,
+  author = {Fitsum Meshesha Kifetew and Anna Perini and Angelo Susi},
+  title = {Research on NLP for RE at the FBK-Software Engineering Research Line: A Report},
+  booktitle = {Joint Proceedings of REFSQ-2019 Workshops, Doctoral Symposium, Live Studies Track, and Poster Track co-located with the 25th International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2019), Essen, Germany, March 18th, 2019},
+  publisher = {CEUR-WS.org},
+  year = {2019},
+  volume = {2376},
+  url = {http://ceur-ws.org/Vol-2376/NLP4RE19_paper12.pdf}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:journals/infsof/PanichellaKT18" class="entry">
 	<td>Panichella, A., Kifetew, F.M. and Tonella, P.</td>
-	<td>A large scale empirical comparison of state-of-the-art search-based test case generators</td>
+	<td>A large scale empirical comparison of state-of-the-art search-based test case generators <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/infsof/PanichellaKT18','bibtex')">BibTeX</a>]</p></td>
 	<td>2018</td>
 	<td>Inf. Softw. Technol.<br/>Vol. 104, pp. 236-256&nbsp;</td>
 	<td>article</td>
 	<td><a href="https://doi.org/10.1016/j.infsof.2018.08.009">DOI</a> <a href="https://doi.org/10.1016/j.infsof.2018.08.009">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:journals/infsof/PanichellaKT18" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DBLP:journals/infsof/PanichellaKT18,
+  author = {Annibale Panichella and Fitsum Meshesha Kifetew and Paolo Tonella},
+  title = {A large scale empirical comparison of state-of-the-art search-based test case generators},
+  journal = {Inf. Softw. Technol.},
+  year = {2018},
+  volume = {104},
+  pages = {236--256},
+  url = {https://doi.org/10.1016/j.infsof.2018.08.009},
+  doi = {https://doi.org/10.1016/j.infsof.2018.08.009}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:journals/tse/PanichellaKT18" class="entry">
 	<td>Panichella, A., Kifetew, F.M. and Tonella, P.</td>
-	<td>Automated Test Case Generation as a Many-Objective Optimisation Problem with Dynamic Selection of the Targets</td>
+	<td>Automated Test Case Generation as a Many-Objective Optimisation Problem with Dynamic Selection of the Targets <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/tse/PanichellaKT18','bibtex')">BibTeX</a>]</p></td>
 	<td>2018</td>
 	<td>IEEE Trans. Software Eng.<br/>Vol. 44(2), pp. 122-158&nbsp;</td>
 	<td>article</td>
 	<td><a href="https://doi.org/10.1109/TSE.2017.2663435">DOI</a> <a href="https://doi.org/10.1109/TSE.2017.2663435">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:journals/tse/PanichellaKT18" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DBLP:journals/tse/PanichellaKT18,
+  author = {Annibale Panichella and Fitsum Meshesha Kifetew and Paolo Tonella},
+  title = {Automated Test Case Generation as a Many-Objective Optimisation Problem with Dynamic Selection of the Targets},
+  journal = {IEEE Trans. Software Eng.},
+  year = {2018},
+  volume = {44},
+  number = {2},
+  pages = {122--158},
+  url = {https://doi.org/10.1109/TSE.2017.2663435},
+  doi = {https://doi.org/10.1109/TSE.2017.2663435}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icse/MolinaKP18" class="entry">
 	<td>Molina, U.R., Kifetew, F.M. and Panichella, A.</td>
-	<td>Java unit testing tool competition: sixth round</td>
+	<td>Java unit testing tool competition: sixth round <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icse/MolinaKP18','bibtex')">BibTeX</a>]</p></td>
 	<td>2018</td>
 	<td>Proceedings of the 11th International Workshop on Search-Based Software Testing, ICSE 2018, Gothenburg, Sweden, May 28-29, 2018, pp. 22-29&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1145/3194718.3194728">DOI</a> <a href="https://doi.org/10.1145/3194718.3194728">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icse/MolinaKP18" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icse/MolinaKP18,
+  author = {Urko Rueda Molina and Fitsum Meshesha Kifetew and Annibale Panichella},
+  title = {Java unit testing tool competition: sixth round},
+  booktitle = {Proceedings of the 11th International Workshop on Search-Based Software Testing, ICSE 2018, Gothenburg, Sweden, May 28-29, 2018},
+  publisher = {ACM},
+  year = {2018},
+  pages = {22--29},
+  url = {https://doi.org/10.1145/3194718.3194728},
+  doi = {https://doi.org/10.1145/3194718.3194728}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/MunanteKGSPS18" class="entry">
 	<td>Mu&ntilde;ante, D., Kifetew, F.M., Gorro&ntilde;ogoitia, J., Schaniel, R., Perini, A. and Susi, A.</td>
-	<td>Model Driven Software Reconfiguration by Exploiting Grammar Based Genetic Programming</td>
+	<td>Model Driven Software Reconfiguration by Exploiting Grammar Based Genetic Programming <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/MunanteKGSPS18','bibtex')">BibTeX</a>]</p></td>
 	<td>2018</td>
 	<td>8th IEEE International Model-Driven Requirements Engineering Workshop, MoDRE@RE 2018, Banff, AB, Canada, August 20, 2018, pp. 21-25&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/MoDRE.2018.00009">DOI</a> <a href="https://doi.org/10.1109/MoDRE.2018.00009">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/MunanteKGSPS18" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/MunanteKGSPS18,
+  author = {Denisse Mu&ntilde;ante and Fitsum Meshesha Kifetew and Jes&uacute;s Gorro&ntilde;ogoitia and Ronnie Schaniel and Anna Perini and Angelo Susi},
+  title = {Model Driven Software Reconfiguration by Exploiting Grammar Based Genetic Programming},
+  booktitle = {8th IEEE International Model-Driven Requirements Engineering Workshop, MoDRE@RE 2018, Banff, AB, Canada, August 20, 2018},
+  publisher = {IEEE Computer Society},
+  year = {2018},
+  pages = {21--25},
+  url = {https://doi.org/10.1109/MoDRE.2018.00009},
+  doi = {https://doi.org/10.1109/MoDRE.2018.00009}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/refsq/KifetewPS18" class="entry">
 	<td>Kifetew, F.M., Perini, A. and Susi, A.</td>
-	<td>Managing Multi-Lingual User Feedback: The SUPERSEDE Project Experience</td>
+	<td>Managing Multi-Lingual User Feedback: The SUPERSEDE Project Experience <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/refsq/KifetewPS18','bibtex')">BibTeX</a>]</p></td>
 	<td>2018</td>
 	<td><br/>Vol. 2075Joint Proceedings of REFSQ-2018 Workshops, Doctoral Symposium, Live Studies Track, and Poster Track co-located with the 23rd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2018), Utrecht, The Netherlands, March 19, 2018&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="http://ceur-ws.org/Vol-2075/NLP4RE\_paper12.pdf">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/refsq/KifetewPS18" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/refsq/KifetewPS18,
+  author = {Fitsum Meshesha Kifetew and Anna Perini and Angelo Susi},
+  title = {Managing Multi-Lingual User Feedback: The SUPERSEDE Project Experience},
+  booktitle = {Joint Proceedings of REFSQ-2018 Workshops, Doctoral Symposium, Live Studies Track, and Poster Track co-located with the 23rd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2018), Utrecht, The Netherlands, March 19, 2018},
+  publisher = {CEUR-WS.org},
+  year = {2018},
+  volume = {2075},
+  url = {http://ceur-ws.org/Vol-2075/NLP4RE_paper12.pdf}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/ssbse/PanichellaKT18" class="entry">
 	<td>Panichella, A., Kifetew, F.M. and Tonella, P.</td>
-	<td>Incremental Control Dependency Frontier Exploration for Many-Criteria Test Case Generation</td>
+	<td>Incremental Control Dependency Frontier Exploration for Many-Criteria Test Case Generation <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/ssbse/PanichellaKT18','bibtex')">BibTeX</a>]</p></td>
 	<td>2018</td>
 	<td><br/>Vol. 11036Search-Based Software Engineering - 10th International Symposium, SSBSE 2018, Montpellier, France, September 8-9, 2018, Proceedings, pp. 309-324&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-319-99241-9%5C_%7B1%7D%7B7%7D">DOI</a> <a href="https://doi.org/10.1007/978-3-319-99241-9\_17">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/ssbse/PanichellaKT18" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ssbse/PanichellaKT18,
+  author = {Annibale Panichella and Fitsum Meshesha Kifetew and Paolo Tonella},
+  title = {Incremental Control Dependency Frontier Exploration for Many-Criteria Test Case Generation},
+  booktitle = {Search-Based Software Engineering - 10th International Symposium, SSBSE 2018, Montpellier, France, September 8-9, 2018, Proceedings},
+  publisher = {Springer},
+  year = {2018},
+  volume = {11036},
+  pages = {309--324},
+  url = {https://doi.org/10.1007/978-3-319-99241-9_17},
+  doi = {https://doi.org/10.1007/978-3-319-99241-9%5C_%7B1%7D%7B7%7D}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:journals/ese/KifetewTT17" class="entry">
 	<td>Kifetew, F.M., Tiella, R. and Tonella, P.</td>
-	<td>Generating valid grammar-based test inputs by means of genetic programming and annotated grammars</td>
+	<td>Generating valid grammar-based test inputs by means of genetic programming and annotated grammars <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:journals/ese/KifetewTT17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>Empir. Softw. Eng.<br/>Vol. 22(2), pp. 928-961&nbsp;</td>
 	<td>article</td>
 	<td><a href="https://doi.org/10.1007/s10664-015-9422-4">DOI</a> <a href="https://doi.org/10.1007/s10664-015-9422-4">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:journals/ese/KifetewTT17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@article{DBLP:journals/ese/KifetewTT17,
+  author = {Fitsum Meshesha Kifetew and Roberto Tiella and Paolo Tonella},
+  title = {Generating valid grammar-based test inputs by means of genetic programming and annotated grammars},
+  journal = {Empir. Softw. Eng.},
+  year = {2017},
+  volume = {22},
+  number = {2},
+  pages = {928--961},
+  url = {https://doi.org/10.1007/s10664-015-9422-4},
+  doi = {https://doi.org/10.1007/s10664-015-9422-4}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/caise/KifetewSMPSB17" class="entry">
 	<td>Kifetew, F.M., Susi, A., Mu&ntilde;ante, D., Perini, A., Siena, A. and Busetta, P.</td>
-	<td>Towards Multi-decision-maker Requirements Prioritisation via Multi-Objective Optimisation</td>
+	<td>Towards Multi-decision-maker Requirements Prioritisation via Multi-Objective Optimisation <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/caise/KifetewSMPSB17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 1848Proceedings of the Forum and Doctoral Consortium Papers Presented at the 29th International Conference on Advanced Information Systems Engineering, CAiSE 2017, Essen, Germany, June 12-16, 2017, pp. 137-144&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="http://ceur-ws.org/Vol-1848/CAiSE2017\_Forum\_Paper18.pdf">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/caise/KifetewSMPSB17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/caise/KifetewSMPSB17,
+  author = {Fitsum Meshesha Kifetew and Angelo Susi and Denisse Mu&ntilde;ante and Anna Perini and Alberto Siena and Paolo Busetta},
+  title = {Towards Multi-decision-maker Requirements Prioritisation via Multi-Objective Optimisation},
+  booktitle = {Proceedings of the Forum and Doctoral Consortium Papers Presented at the 29th International Conference on Advanced Information Systems Engineering, CAiSE 2017, Essen, Germany, June 12-16, 2017},
+  publisher = {CEUR-WS.org},
+  year = {2017},
+  volume = {1848},
+  pages = {137--144},
+  url = {http://ceur-ws.org/Vol-1848/CAiSE2017_Forum_Paper18.pdf}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/caise/Morales-Ramirez17" class="entry">
 	<td>Morales-Ramirez, I., Kifetew, F.M. and Perini, A.</td>
-	<td>Analysis of Online Discussions in Support of Requirements Discovery</td>
+	<td>Analysis of Online Discussions in Support of Requirements Discovery <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/caise/Morales-Ramirez17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 10253Advanced Information Systems Engineering - 29th International Conference, CAiSE 2017, Essen, Germany, June 12-16, 2017, Proceedings, pp. 159-174&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-319-59536-8%5C_%7B1%7D%7B1%7D">DOI</a> <a href="https://doi.org/10.1007/978-3-319-59536-8\_11">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/caise/Morales-Ramirez17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/caise/Morales-Ramirez17,
+  author = {Itzel Morales-Ramirez and Fitsum Meshesha Kifetew and Anna Perini},
+  title = {Analysis of Online Discussions in Support of Requirements Discovery},
+  booktitle = {Advanced Information Systems Engineering - 29th International Conference, CAiSE 2017, Essen, Germany, June 12-16, 2017, Proceedings},
+  publisher = {Springer},
+  year = {2017},
+  volume = {10253},
+  pages = {159--174},
+  url = {https://doi.org/10.1007/978-3-319-59536-8_11},
+  doi = {https://doi.org/10.1007/978-3-319-59536-8%5C_%7B1%7D%7B1%7D}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/compsac/BusettaKMPSS17" class="entry">
 	<td>Busetta, P., Kifetew, F.M., Mu&ntilde;ante, D., Perini, A., Siena, A. and Susi, A.</td>
-	<td>Tool-Supported Collaborative Requirements Prioritisation</td>
+	<td>Tool-Supported Collaborative Requirements Prioritisation <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/compsac/BusettaKMPSS17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>41st IEEE Annual Computer Software and Applications Conference, COMPSAC 2017, Turin, Italy, July 4-8, 2017. Volume 1, pp. 180-189&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/COMPSAC.2017.243">DOI</a> <a href="https://doi.org/10.1109/COMPSAC.2017.243">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/compsac/BusettaKMPSS17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/compsac/BusettaKMPSS17,
+  author = {Paolo Busetta and Fitsum Meshesha Kifetew and Denisse Mu&ntilde;ante and Anna Perini and Alberto Siena and Angelo Susi},
+  title = {Tool-Supported Collaborative Requirements Prioritisation},
+  booktitle = {41st IEEE Annual Computer Software and Applications Conference, COMPSAC 2017, Turin, Italy, July 4-8, 2017. Volume 1},
+  publisher = {IEEE Computer Society},
+  year = {2017},
+  pages = {180--189},
+  url = {https://doi.org/10.1109/COMPSAC.2017.243},
+  doi = {https://doi.org/10.1109/COMPSAC.2017.243}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/istar/KifetewMMPSS17" class="entry">
 	<td>Kifetew, F.M., Morandini, M., Mu&ntilde;ante, D., Perini, A., Siena, A. and Susi, A.</td>
-	<td>Goal-aware Analysis of Software License Risks</td>
+	<td>Goal-aware Analysis of Software License Risks <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/istar/KifetewMMPSS17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 1829Proceedings of the 10th International i* Workshop co-located with the 29th International Conference on Advanced Information Systems Engineering (CAiSE 2017), Essen, Germany, June 12-13, 2017, pp. 1-6&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="http://ceur-ws.org/Vol-1829/iStar17\_paper\_12.pdf">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/istar/KifetewMMPSS17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/istar/KifetewMMPSS17,
+  author = {Fitsum Meshesha Kifetew and Mirko Morandini and Denisse Mu&ntilde;ante and Anna Perini and Alberto Siena and Angelo Susi},
+  title = {Goal-aware Analysis of Software License Risks},
+  booktitle = {Proceedings of the 10th International i* Workshop co-located with the 29th International Conference on Advanced Information Systems Engineering (CAiSE 2017), Essen, Germany, June 12-13, 2017},
+  publisher = {CEUR-WS.org},
+  year = {2017},
+  volume = {1829},
+  pages = {1--6},
+  url = {http://ceur-ws.org/Vol-1829/iStar17_paper_12.pdf}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/MunanteSKSSS17" class="entry">
 	<td>Mu&ntilde;ante, D., Siena, A., Kifetew, F.M., Susi, A., Stade, M.J.C. and Seyff, N.</td>
-	<td>Gathering Requirements for Software Configuration from the Crowd</td>
+	<td>Gathering Requirements for Software Configuration from the Crowd <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/MunanteSKSSS17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>IEEE 25th International Requirements Engineering Conference Workshops, RE 2017 Workshops, Lisbon, Portugal, September 4-8, 2017, pp. 176-181&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/REW.2017.74">DOI</a> <a href="https://doi.org/10.1109/REW.2017.74">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/MunanteSKSSS17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/MunanteSKSSS17,
+  author = {Denisse Mu&ntilde;ante and Alberto Siena and Fitsum Meshesha Kifetew and Angelo Susi and Melanie J. C. Stade and Norbert Seyff},
+  title = {Gathering Requirements for Software Configuration from the Crowd},
+  booktitle = {IEEE 25th International Requirements Engineering Conference Workshops, RE 2017 Workshops, Lisbon, Portugal, September 4-8, 2017},
+  publisher = {IEEE Computer Society},
+  year = {2017},
+  pages = {176--181},
+  url = {https://doi.org/10.1109/REW.2017.74},
+  doi = {https://doi.org/10.1109/REW.2017.74}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/DabrowskiKMLSS17" class="entry">
 	<td>Dabrowski, J., Kifetew, F.M., Mu&ntilde;ante, D., Letier, E., Siena, A. and Susi, A.</td>
-	<td>Discovering Requirements through Goal-Driven Process Mining</td>
+	<td>Discovering Requirements through Goal-Driven Process Mining <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/DabrowskiKMLSS17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>IEEE 25th International Requirements Engineering Conference Workshops, RE 2017 Workshops, Lisbon, Portugal, September 4-8, 2017, pp. 199-203&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/REW.2017.61">DOI</a> <a href="https://doi.org/10.1109/REW.2017.61">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/DabrowskiKMLSS17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/DabrowskiKMLSS17,
+  author = {Jacek Dabrowski and Fitsum Meshesha Kifetew and Denisse Mu&ntilde;ante and Emmanuel Letier and Alberto Siena and Angelo Susi},
+  title = {Discovering Requirements through Goal-Driven Process Mining},
+  booktitle = {IEEE 25th International Requirements Engineering Conference Workshops, RE 2017 Workshops, Lisbon, Portugal, September 4-8, 2017},
+  publisher = {IEEE Computer Society},
+  year = {2017},
+  pages = {199--203},
+  url = {https://doi.org/10.1109/REW.2017.61},
+  doi = {https://doi.org/10.1109/REW.2017.61}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/KifetewMPSSBV17" class="entry">
 	<td>Kifetew, F.M., Mu&ntilde;ante, D., Perini, A., Susi, A., Siena, A., Busetta, P. and Valerio, D.</td>
-	<td>Gamifying Collaborative Prioritization: Does Pointsification Work?</td>
+	<td>Gamifying Collaborative Prioritization: Does Pointsification Work? <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/KifetewMPSSBV17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>25th IEEE International Requirements Engineering Conference, RE 2017, Lisbon, Portugal, September 4-8, 2017, pp. 322-331&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/RE.2017.66">DOI</a> <a href="https://doi.org/10.1109/RE.2017.66">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/KifetewMPSSBV17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/KifetewMPSSBV17,
+  author = {Fitsum Meshesha Kifetew and Denisse Mu&ntilde;ante and Anna Perini and Angelo Susi and Alberto Siena and Paolo Busetta and Danilo Valerio},
+  title = {Gamifying Collaborative Prioritization: Does Pointsification Work?},
+  booktitle = {25th IEEE International Requirements Engineering Conference, RE 2017, Lisbon, Portugal, September 4-8, 2017},
+  publisher = {IEEE Computer Society},
+  year = {2017},
+  pages = {322--331},
+  url = {https://doi.org/10.1109/RE.2017.66},
+  doi = {https://doi.org/10.1109/RE.2017.66}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/Morales-Ramirez17" class="entry">
 	<td>Morales-Ramirez, I., Mu&ntilde;ante, D., Kifetew, F.M., Perini, A., Susi, A. and Siena, A.</td>
-	<td>Exploiting User Feedback in Tool-Supported Multi-criteria Requirements Prioritization</td>
+	<td>Exploiting User Feedback in Tool-Supported Multi-criteria Requirements Prioritization <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/Morales-Ramirez17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>25th IEEE International Requirements Engineering Conference, RE 2017, Lisbon, Portugal, September 4-8, 2017, pp. 424-429&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/RE.2017.41">DOI</a> <a href="https://doi.org/10.1109/RE.2017.41">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/Morales-Ramirez17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/Morales-Ramirez17,
+  author = {Itzel Morales-Ramirez and Denisse Mu&ntilde;ante and Fitsum Meshesha Kifetew and Anna Perini and Angelo Susi and Alberto Siena},
+  title = {Exploiting User Feedback in Tool-Supported Multi-criteria Requirements Prioritization},
+  booktitle = {25th IEEE International Requirements Engineering Conference, RE 2017, Lisbon, Portugal, September 4-8, 2017},
+  publisher = {IEEE Computer Society},
+  year = {2017},
+  pages = {424--429},
+  url = {https://doi.org/10.1109/RE.2017.41},
+  doi = {https://doi.org/10.1109/RE.2017.41}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/re/KifetewMPSSB17" class="entry">
 	<td>Kifetew, F.M., Mu&ntilde;ante, D., Perini, A., Susi, A., Siena, A. and Busetta, P.</td>
-	<td>DMGame: A Gamified Collaborative Requirements Prioritisation Tool</td>
+	<td>DMGame: A Gamified Collaborative Requirements Prioritisation Tool <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/re/KifetewMPSSB17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td>25th IEEE International Requirements Engineering Conference, RE 2017, Lisbon, Portugal, September 4-8, 2017, pp. 468-469&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/RE.2017.46">DOI</a> <a href="https://doi.org/10.1109/RE.2017.46">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/re/KifetewMPSSB17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/re/KifetewMPSSB17,
+  author = {Fitsum Meshesha Kifetew and Denisse Mu&ntilde;ante and Anna Perini and Angelo Susi and Alberto Siena and Paolo Busetta},
+  title = {DMGame: A Gamified Collaborative Requirements Prioritisation Tool},
+  booktitle = {25th IEEE International Requirements Engineering Conference, RE 2017, Lisbon, Portugal, September 4-8, 2017},
+  publisher = {IEEE Computer Society},
+  year = {2017},
+  pages = {468--469},
+  url = {https://doi.org/10.1109/RE.2017.46},
+  doi = {https://doi.org/10.1109/RE.2017.46}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/refsq/MunanteKA17" class="entry">
 	<td>Mu&ntilde;ante, D., Kifetew, F.M. and Albrecht, O.</td>
-	<td>Modelling Prioritisation Decision-making in Software Evolution</td>
+	<td>Modelling Prioritisation Decision-making in Software Evolution <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/refsq/MunanteKA17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 1796Joint Proceedings of REFSQ-2017 Workshops, Doctoral Symposium, Research Method Track, and Poster Track co-located with the 22nd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2017), Essen, Germany, February 27, 2017&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="http://ceur-ws.org/Vol-1796/priore-paper-2.pdf">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/refsq/MunanteKA17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/refsq/MunanteKA17,
+  author = {Denisse Mu&ntilde;ante and Fitsum Meshesha Kifetew and Oliver Albrecht},
+  title = {Modelling Prioritisation Decision-making in Software Evolution},
+  booktitle = {Joint Proceedings of REFSQ-2017 Workshops, Doctoral Symposium, Research Method Track, and Poster Track co-located with the 22nd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2017), Essen, Germany, February 27, 2017},
+  publisher = {CEUR-WS.org},
+  year = {2017},
+  volume = {1796},
+  url = {http://ceur-ws.org/Vol-1796/priore-paper-2.pdf}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/ssbse/PanichellaKT17" class="entry">
 	<td>Panichella, A., Kifetew, F.M. and Tonella, P.</td>
-	<td>LIPS vs MOSA: A Replicated Empirical Study on Automated Test Case Generation</td>
+	<td>LIPS vs MOSA: A Replicated Empirical Study on Automated Test Case Generation <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/ssbse/PanichellaKT17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 10452Search Based Software Engineering - 9th International Symposium, SSBSE 2017, Paderborn, Germany, September 9-11, 2017, Proceedings, pp. 83-98&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-319-66299-2%5C_6">DOI</a> <a href="https://doi.org/10.1007/978-3-319-66299-2\_6">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/ssbse/PanichellaKT17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ssbse/PanichellaKT17,
+  author = {Annibale Panichella and Fitsum Meshesha Kifetew and Paolo Tonella},
+  title = {LIPS vs MOSA: A Replicated Empirical Study on Automated Test Case Generation},
+  booktitle = {Search Based Software Engineering - 9th International Symposium, SSBSE 2017, Paderborn, Germany, September 9-11, 2017, Proceedings},
+  publisher = {Springer},
+  year = {2017},
+  volume = {10452},
+  pages = {83--98},
+  url = {https://doi.org/10.1007/978-3-319-66299-2_6},
+  doi = {https://doi.org/10.1007/978-3-319-66299-2%5C_6}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/ssbse/KifetewMGSSP17" class="entry">
 	<td>Kifetew, F.M., Mu&ntilde;ante, D., Gorro&ntilde;ogoitia, J., Siena, A., Susi, A. and Perini, A.</td>
-	<td>Grammar Based Genetic Programming for Software Configuration Problem</td>
+	<td>Grammar Based Genetic Programming for Software Configuration Problem <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/ssbse/KifetewMGSSP17','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 10452Search Based Software Engineering - 9th International Symposium, SSBSE 2017, Paderborn, Germany, September 9-11, 2017, Proceedings, pp. 130-136&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-319-66299-2%5C_%7B1%7D%7B0%7D">DOI</a> <a href="https://doi.org/10.1007/978-3-319-66299-2\_10">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/ssbse/KifetewMGSSP17" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ssbse/KifetewMGSSP17,
+  author = {Fitsum Meshesha Kifetew and Denisse Mu&ntilde;ante and Jes&uacute;s Gorro&ntilde;ogoitia and Alberto Siena and Angelo Susi and Anna Perini},
+  title = {Grammar Based Genetic Programming for Software Configuration Problem},
+  booktitle = {Search Based Software Engineering - 9th International Symposium, SSBSE 2017, Paderborn, Germany, September 9-11, 2017, Proceedings},
+  publisher = {Springer},
+  year = {2017},
+  volume = {10452},
+  pages = {130--136},
+  url = {https://doi.org/10.1007/978-3-319-66299-2_10},
+  doi = {https://doi.org/10.1007/978-3-319-66299-2%5C_%7B1%7D%7B0%7D}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/refsq/2017w" class="entry">
 	<td></td>
-	<td>Joint Proceedings of REFSQ-2017 Workshops, Doctoral Symposium, Research Method Track, and Poster Track co-located with the 22nd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2017), Essen, Germany, February 27, 2017</td>
+	<td>Joint Proceedings of REFSQ-2017 Workshops, Doctoral Symposium, Research Method Track, and Poster Track co-located with the 22nd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2017), Essen, Germany, February 27, 2017 <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/refsq/2017w','bibtex')">BibTeX</a>]</p></td>
 	<td>2017</td>
 	<td><br/>Vol. 1796&nbsp;</td>
 	<td>proceedings</td>
 	<td><a href="http://ceur-ws.org/Vol-1796">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/refsq/2017w" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@proceedings{DBLP:conf/refsq/2017w,,
+  title = {Joint Proceedings of REFSQ-2017 Workshops, Doctoral Symposium, Research Method Track, and Poster Track co-located with the 22nd International Conference on Requirements Engineering: Foundation for Software Quality (REFSQ 2017), Essen, Germany, February 27, 2017},
+  publisher = {CEUR-WS.org},
+  year = {2017},
+  volume = {1796},
+  url = {http://ceur-ws.org/Vol-1796}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icse/PanichellaKT15" class="entry">
 	<td>Panichella, A., Kifetew, F.M. and Tonella, P.</td>
-	<td>Results for EvoSuite - MOSA at the Third Unit Testing Tool Competition</td>
+	<td>Results for EvoSuite - MOSA at the Third Unit Testing Tool Competition <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icse/PanichellaKT15','bibtex')">BibTeX</a>]</p></td>
 	<td>2015</td>
 	<td>8th IEEE/ACM International Workshop on Search-Based Software Testing, SBST 2015, Florence, Italy, May 18-19, 2015, pp. 28-31&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/SBST.2015.14">DOI</a> <a href="https://doi.org/10.1109/SBST.2015.14">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icse/PanichellaKT15" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icse/PanichellaKT15,
+  author = {Annibale Panichella and Fitsum Meshesha Kifetew and Paolo Tonella},
+  title = {Results for EvoSuite - MOSA at the Third Unit Testing Tool Competition},
+  booktitle = {8th IEEE/ACM International Workshop on Search-Based Software Testing, SBST 2015, Florence, Italy, May 18-19, 2015},
+  publisher = {IEEE Computer Society},
+  year = {2015},
+  pages = {28--31},
+  url = {https://doi.org/10.1109/SBST.2015.14},
+  doi = {https://doi.org/10.1109/SBST.2015.14}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icst/PanichellaKT15" class="entry">
 	<td>Panichella, A., Kifetew, F.M. and Tonella, P.</td>
-	<td>Reformulating Branch Coverage as a Many-Objective Optimization Problem</td>
+	<td>Reformulating Branch Coverage as a Many-Objective Optimization Problem <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icst/PanichellaKT15','bibtex')">BibTeX</a>]</p></td>
 	<td>2015</td>
 	<td>8th IEEE International Conference on Software Testing, Verification and Validation, ICST 2015, Graz, Austria, April 13-17, 2015, pp. 1-10&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ICST.2015.7102604">DOI</a> <a href="https://doi.org/10.1109/ICST.2015.7102604">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icst/PanichellaKT15" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icst/PanichellaKT15,
+  author = {Annibale Panichella and Fitsum Meshesha Kifetew and Paolo Tonella},
+  title = {Reformulating Branch Coverage as a Many-Objective Optimization Problem},
+  booktitle = {8th IEEE International Conference on Software Testing, Verification and Validation, ICST 2015, Graz, Austria, April 13-17, 2015},
+  publisher = {IEEE Computer Society},
+  year = {2015},
+  pages = {1--10},
+  url = {https://doi.org/10.1109/ICST.2015.7102604},
+  doi = {https://doi.org/10.1109/ICST.2015.7102604}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/icst/KifetewJTOT14" class="entry">
 	<td>Kifetew, F.M., Jin, W., Tiella, R., Orso, A. and Tonella, P.</td>
-	<td>Reproducing Field Failures for Programs with Complex Grammar-Based Input</td>
+	<td>Reproducing Field Failures for Programs with Complex Grammar-Based Input <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/icst/KifetewJTOT14','bibtex')">BibTeX</a>]</p></td>
 	<td>2014</td>
 	<td>Seventh IEEE International Conference on Software Testing, Verification and Validation, ICST 2014, March 31 2014-April 4, 2014, Cleveland, Ohio, USA, pp. 163-172&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ICST.2014.29">DOI</a> <a href="https://doi.org/10.1109/ICST.2014.29">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/icst/KifetewJTOT14" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/icst/KifetewJTOT14,
+  author = {Fitsum Meshesha Kifetew and Wei Jin and Roberto Tiella and Alessandro Orso and Paolo Tonella},
+  title = {Reproducing Field Failures for Programs with Complex Grammar-Based Input},
+  booktitle = {Seventh IEEE International Conference on Software Testing, Verification and Validation, ICST 2014, March 31 2014-April 4, 2014, Cleveland, Ohio, USA},
+  publisher = {IEEE Computer Society},
+  year = {2014},
+  pages = {163--172},
+  url = {https://doi.org/10.1109/ICST.2014.29},
+  doi = {https://doi.org/10.1109/ICST.2014.29}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/ssbse/KifetewTT14" class="entry">
 	<td>Kifetew, F.M., Tiella, R. and Tonella, P.</td>
-	<td>Combining Stochastic Grammars and Genetic Programming for Coverage Testing at the System Level</td>
+	<td>Combining Stochastic Grammars and Genetic Programming for Coverage Testing at the System Level <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/ssbse/KifetewTT14','bibtex')">BibTeX</a>]</p></td>
 	<td>2014</td>
 	<td><br/>Vol. 8636Search-Based Software Engineering - 6th International Symposium, SSBSE 2014, Fortaleza, Brazil, August 26-29, 2014. Proceedings, pp. 138-152&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-319-09940-8%5C_%7B1%7D%7B0%7D">DOI</a> <a href="https://doi.org/10.1007/978-3-319-09940-8\_10">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/ssbse/KifetewTT14" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ssbse/KifetewTT14,
+  author = {Fitsum Meshesha Kifetew and Roberto Tiella and Paolo Tonella},
+  title = {Combining Stochastic Grammars and Genetic Programming for Coverage Testing at the System Level},
+  booktitle = {Search-Based Software Engineering - 6th International Symposium, SSBSE 2014, Fortaleza, Brazil, August 26-29, 2014. Proceedings},
+  publisher = {Springer},
+  year = {2014},
+  volume = {8636},
+  pages = {138--152},
+  url = {https://doi.org/10.1007/978-3-319-09940-8_10},
+  doi = {https://doi.org/10.1007/978-3-319-09940-8%5C_%7B1%7D%7B0%7D}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/issta/KifetewPLOT13" class="entry">
 	<td>Kifetew, F.M., Panichella, A., Lucia, A.D., Oliveto, R. and Tonella, P.</td>
-	<td>Orthogonal exploration of the search space in evolutionary test case generation</td>
+	<td>Orthogonal exploration of the search space in evolutionary test case generation <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/issta/KifetewPLOT13','bibtex')">BibTeX</a>]</p></td>
 	<td>2013</td>
 	<td>International Symposium on Software Testing and Analysis, ISSTA '13, Lugano, Switzerland, July 15-20, 2013, pp. 257-267&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1145/2483760.2483789">DOI</a> <a href="https://doi.org/10.1145/2483760.2483789">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/issta/KifetewPLOT13" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/issta/KifetewPLOT13,
+  author = {Fitsum Meshesha Kifetew and Annibale Panichella and Andrea De Lucia and Rocco Oliveto and Paolo Tonella},
+  title = {Orthogonal exploration of the search space in evolutionary test case generation},
+  booktitle = {International Symposium on Software Testing and Analysis, ISSTA '13, Lugano, Switzerland, July 15-20, 2013},
+  publisher = {ACM},
+  year = {2013},
+  pages = {257--267},
+  url = {https://doi.org/10.1145/2483760.2483789},
+  doi = {https://doi.org/10.1145/2483760.2483789}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/kbse/KifetewJTOT13" class="entry">
 	<td>Kifetew, F.M., Jin, W., Tiella, R., Orso, A. and Tonella, P.</td>
-	<td>SBFR: A search based approach for reproducing failures of programs with grammar based input</td>
+	<td>SBFR: A search based approach for reproducing failures of programs with grammar based input <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/kbse/KifetewJTOT13','bibtex')">BibTeX</a>]</p></td>
 	<td>2013</td>
 	<td>2013 28th IEEE/ACM International Conference on Automated Software Engineering, ASE 2013, Silicon Valley, CA, USA, November 11-15, 2013, pp. 604-609&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1109/ASE.2013.6693120">DOI</a> <a href="https://doi.org/10.1109/ASE.2013.6693120">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/kbse/KifetewJTOT13" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/kbse/KifetewJTOT13,
+  author = {Fitsum Meshesha Kifetew and Wei Jin and Roberto Tiella and Alessandro Orso and Paolo Tonella},
+  title = {SBFR: A search based approach for reproducing failures of programs with grammar based input},
+  booktitle = {2013 28th IEEE/ACM International Conference on Automated Software Engineering, ASE 2013, Silicon Valley, CA, USA, November 11-15, 2013},
+  publisher = {IEEE},
+  year = {2013},
+  pages = {604--609},
+  url = {https://doi.org/10.1109/ASE.2013.6693120},
+  doi = {https://doi.org/10.1109/ASE.2013.6693120}
+}
+</pre></td>
+</tr>
 <tr id="DBLP:conf/ssbse/Kifetew12" class="entry">
 	<td>Kifetew, F.M.</td>
-	<td>A Search-Based Framework for Failure Reproduction</td>
+	<td>A Search-Based Framework for Failure Reproduction <p class="infolinks">[<a href="javascript:toggleInfo('DBLP:conf/ssbse/Kifetew12','bibtex')">BibTeX</a>]</p></td>
 	<td>2012</td>
 	<td><br/>Vol. 7515Search Based Software Engineering - 4th International Symposium, SSBSE 2012, Riva del Garda, Italy, September 28-30, 2012. Proceedings, pp. 279-284&nbsp;</td>
 	<td>inproceedings</td>
 	<td><a href="https://doi.org/10.1007/978-3-642-33119-0%5C_%7B2%7D%7B2%7D">DOI</a> <a href="https://doi.org/10.1007/978-3-642-33119-0\_22">URL</a>&nbsp;</td>
 </tr>
+<tr id="bib_DBLP:conf/ssbse/Kifetew12" class="bibtex noshow">
+<td colspan="6"><b>BibTeX</b>:
+<pre>
+@inproceedings{DBLP:conf/ssbse/Kifetew12,
+  author = {Fitsum Meshesha Kifetew},
+  title = {A Search-Based Framework for Failure Reproduction},
+  booktitle = {Search Based Software Engineering - 4th International Symposium, SSBSE 2012, Riva del Garda, Italy, September 28-30, 2012. Proceedings},
+  publisher = {Springer},
+  year = {2012},
+  volume = {7515},
+  pages = {279--284},
+  url = {https://doi.org/10.1007/978-3-642-33119-0_22},
+  doi = {https://doi.org/10.1007/978-3-642-33119-0%5C_%7B2%7D%7B2%7D}
+}
+</pre></td>
+</tr>
 </tbody>
 </table>
 <footer>
- <small>Created by <a href="http://jabref.sourceforge.net">JabRef</a> on 29/04/2023.</small>
+ <small>Created by <a href="https://www.jabref.org">JabRef</a> on 2023/12/18.</small>
 </footer>
 <!-- end content from Jabref -->
 
